@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+
+# Node.js / React
+node_modules/
+build/
+dist/
+*.log
+.env
+.DS_Store
+
+# Executables
+*.exe
+
+# System / Editor folders
+.vscode/
+.idea/
+
+# macOS
+*.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
