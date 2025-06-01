@@ -33,15 +33,37 @@ export function ScanForm() {
     }
   }
 
-  function handleExport() {
-    const wsData = [[ 'Domain', 'Engine', 'Output', 'Error' ],
-      [ domain, engine, output?.replace(/\n/g, ' '), error?.replace(/\n/g, ' ') ]
-    ];
-    const ws = utils.aoa_to_sheet(wsData);
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, 'Harvester');
-    writeFile(wb, `harvester_results_${domain}.xlsx`);
+function handleExport() {
+  const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+  const subdomainRegex = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b/gi;
+  const ipRegex = /\b\d{1,3}(?:\.\d{1,3}){3}\b/g;
+  const socialRegex = /https?:\/\/(?:www\.)?(linkedin|facebook|twitter|instagram)\.com\/[^\s]+/gi;
+
+  const unique = (arr) => [...new Set(arr || [])];
+
+  const emails = unique(output.match(emailRegex));
+  const subdomains = unique(output.match(subdomainRegex));
+  const ips = unique(output.match(ipRegex));
+  const socials = unique(output.match(socialRegex));
+
+  const rows = [];
+
+  emails.forEach(val => rows.push({ Type: 'Email', Value: val }));
+  subdomains.forEach(val => rows.push({ Type: 'Subdomain', Value: val }));
+  ips.forEach(val => rows.push({ Type: 'IP', Value: val }));
+  socials.forEach(val => rows.push({ Type: 'Social', Value: val }));
+
+  if (rows.length === 0) {
+    alert('No artifacts found to export.');
+    return;
   }
+
+  const ws = utils.json_to_sheet(rows);
+  const wb = utils.book_new();
+  utils.book_append_sheet(wb, ws, 'Artifacts');
+  writeFile(wb, `harvester_results_${domain}.xlsx`);
+}
+
 
   return (
     <div>

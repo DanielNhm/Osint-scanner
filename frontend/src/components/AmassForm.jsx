@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import axios from 'axios';
 import { utils, writeFile } from 'xlsx';
@@ -45,10 +44,32 @@ export function AmassForm() {
     }
   }
 
+  function extractArtifacts(text) {
+    const emails = [...new Set((text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || []))];
+    const ips = [...new Set((text.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g) || []))];
+    const subdomains = [...new Set((text.match(/\b([a-z0-9]+(?:[-.][a-z0-9]+)*\.[a-z]{2,})\b/g) || []))];
+    const socials = [...new Set((text.match(/(?:https?:\/\/)?(?:www\.)?(linkedin|twitter|facebook|instagram)\.com\/[a-zA-Z0-9._-]+/g) || []))];
+
+    return { emails, ips, subdomains, socials };
+  }
+
   function handleExport() {
-    const wsData = [[ 'Domain', 'Output', 'Error' ],
-      [ domain, output?.replace(/\n/g, ' '), error?.replace(/\n/g, ' ') ]
+    const artifacts = extractArtifacts(output);
+
+    const wsData = [
+      ['Domain', domain],
+      [],
+      ['Emails', ...artifacts.emails],
+      [],
+      ['IPs', ...artifacts.ips],
+      [],
+      ['Subdomains', ...artifacts.subdomains],
+      [],
+      ['Social Profiles', ...artifacts.socials],
+      [],
+      ['Error', error]
     ];
+
     const ws = utils.aoa_to_sheet(wsData);
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, 'Amass');
@@ -71,7 +92,7 @@ export function AmassForm() {
         <div>
           <h4>Output:</h4>
           <pre>{output}</pre>
-          <button onClick={handleExport}>Export to Excel</button>
+          <button onClick={handleExport}>Export Artifacts to Excel</button>
         </div>
       )}
       {error && (

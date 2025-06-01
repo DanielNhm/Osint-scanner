@@ -1,93 +1,141 @@
-import React, { useState, useEffect } from 'react';
-import { exportToCSV } from '../utils/exportCSV';
+import React, { useEffect, useState } from 'react';
+import { utils, writeFile } from 'xlsx';
 
 export function ScanHistory() {
   const [history, setHistory] = useState([]);
+  const [modalData, setModalData] = useState(null);
 
   useEffect(() => {
-    const storedHistory = JSON.parse(localStorage.getItem('scanHistory')) || [];
-    setHistory(storedHistory);
+    fetch('http://127.0.0.1:8000/history')
+      .then(res => res.json())
+      .then(setHistory)
+      .catch(err => console.error('Failed to load history', err));
   }, []);
 
-  const handleDownload = (entry, index) => {
-    const data = {
-      Tool: entry.tool || detectTool(entry),
-      Domain: entry.domain || 'N/A',
-      Engine: entry.engine || 'N/A',
-      'Harvester Output': (entry.harvester_output || '').replace(/\n/g, ' '),
-      'Harvester Error': (entry.harvester_error || '').replace(/\n/g, ' '),
-      'Amass Output': (entry.amass_output || entry.output || '').replace(/\n/g, ' '),
-      'Amass Error': (entry.amass_error || entry.error || '').replace(/\n/g, ' ')
-    };
+  function extractArtifacts(scan) {
+    const output = scan.output || scan.harvester_output || scan.amass_output || '';
+    const rows = [];
 
-    exportToCSV([data], `scan_result_${index}.csv`);
-  };
+    const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+    const subdomainRegex = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b/gi;
+    const ipRegex = /\b\d{1,3}(?:\.\d{1,3}){3}\b/g;
+    const socialRegex = /https?:\/\/(?:www\.)?(linkedin|facebook|twitter|instagram)\.com\/[^\s]+/gi;
 
-  const detectTool = (entry) => {
-    if (entry.harvester_output && entry.amass_output) return 'combined';
-    if (entry.harvester_output) return 'theHarvester';
-    if (entry.amass_output || entry.output) return 'amass';
-    return 'unknown';
-  };
+    const unique = (arr) => [...new Set(arr || [])];
 
-  const handleClearHistory = () => {
-    localStorage.removeItem('scanHistory');
-    setHistory([]);
-  };
+    unique(output.match(emailRegex)).forEach(email =>
+      rows.push({ Type: 'Email', Value: email })
+    );
+    unique(output.match(subdomainRegex)).forEach(domain =>
+      rows.push({ Type: 'Subdomain', Value: domain })
+    );
+    unique(output.match(ipRegex)).forEach(ip =>
+      rows.push({ Type: 'IP', Value: ip })
+    );
+    unique(output.match(socialRegex)).forEach(profile =>
+      rows.push({ Type: 'Social', Value: profile })
+    );
+
+    return rows;
+  }
+
+  function handleExport(scan) {
+    const rows = extractArtifacts(scan);
+    if (rows.length === 0) {
+      alert('No artifacts found to export.');
+      return;
+    }
+
+    const ws = utils.json_to_sheet(rows);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, 'Artifacts');
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `scan_${scan.domain}_${timestamp}.xlsx`;
+
+    writeFile(wb, filename);
+  }
+
+  function handleClear() {
+    if (!window.confirm("Are you sure you want to clear all history?")) return;
+
+    fetch('http://127.0.0.1:8000/history', { method: 'DELETE' })
+      .then(() => setHistory([]))
+      .catch(err => console.error('Failed to clear history', err));
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    try {
+      return new Date(dateStr).toLocaleString();
+    } catch {
+      return dateStr;
+    }
+  }
 
   return (
-    <div className="p-4">
-      <h2 className="text-xl font-bold mb-2">Scan History</h2>
+    <div className="scan-history">
+      <h2>Scan History</h2>
+
+      {history.length > 0 && (
+        <button onClick={handleClear} style={{ marginBottom: '1rem' }}>
+          Clear History
+        </button>
+      )}
 
       {history.length === 0 ? (
-        <p>No previous scans.</p>
+        <p>No scans yet.</p>
       ) : (
-        <>
-          <button
-            onClick={handleClearHistory}
-            className="mb-4 bg-red-500 text-white px-3 py-1 rounded"
-          >
-            Clear History
-          </button>
-          {history.map((entry, index) => (
-            <div key={index} className="border rounded p-3 mb-3 shadow-md bg-white dark:bg-gray-800">
-              <p><strong>Tool:</strong> {entry.tool || detectTool(entry)}</p>
-              <p><strong>Domain:</strong> {entry.domain || 'N/A'}</p>
-              {entry.engine && <p><strong>Engine:</strong> {entry.engine}</p>}
-              {entry.harvester_output && (
-                <>
-                  <p><strong>Harvester Output:</strong></p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-2 overflow-x-auto">{entry.harvester_output}</pre>
-                </>
-              )}
-              {entry.harvester_error && (
-                <>
-                  <p><strong>Harvester Error:</strong></p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-2 overflow-x-auto">{entry.harvester_error}</pre>
-                </>
-              )}
-              {entry.amass_output || entry.output ? (
-                <>
-                  <p><strong>Amass Output:</strong></p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-2 overflow-x-auto">{entry.amass_output || entry.output}</pre>
-                </>
-              ) : null}
-              {entry.amass_error || entry.error ? (
-                <>
-                  <p><strong>Amass Error:</strong></p>
-                  <pre className="bg-gray-100 dark:bg-gray-700 p-2 overflow-x-auto">{entry.amass_error || entry.error}</pre>
-                </>
-              ) : null}
-              <button
-                className="mt-2 bg-blue-500 text-white px-3 py-1 rounded"
-                onClick={() => handleDownload(entry, index)}
-              >
-                Download CSV
-              </button>
-            </div>
-          ))}
-        </>
+        history.map((scan, idx) => (
+          <div key={idx} className="scan-card">
+            <p><strong>Type:</strong> {scan.type}</p>
+            <p><strong>Domain:</strong> {scan.domain}</p>
+            {scan.engine && <p><strong>Engine:</strong> {scan.engine}</p>}
+            <p><strong>Start:</strong> {formatDate(scan.start_time)}</p>
+            <p><strong>End:</strong> {formatDate(scan.end_time)}</p>
+            <p><strong>Summary:</strong> {getSummary(scan)}</p>
+            <button onClick={() => setModalData(scan)}>
+              View Details
+            </button>
+            <button onClick={() => handleExport(scan)} style={{ marginTop: '1em' }}>
+              Export to Excel
+            </button>
+          </div>
+        ))
+      )}
+
+      {modalData && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            background: '#1e1e1e', padding: '2rem', borderRadius: '8px',
+            maxWidth: '800px', maxHeight: '80%', overflowY: 'auto'
+          }}>
+            <h3>Scan Details</h3>
+            <p><strong>Domain:</strong> {modalData.domain}</p>
+            {modalData.engine && <p><strong>Engine:</strong> {modalData.engine}</p>}
+            <pre>{modalData.output || modalData.harvester_output || ''}</pre>
+            {modalData.amass_output && (
+              <>
+                <h4>Amass Output:</h4>
+                <pre>{modalData.amass_output}</pre>
+              </>
+            )}
+            <button onClick={() => setModalData(null)}>Close</button>
+          </div>
+        </div>
       )}
     </div>
   );
+}
+
+function getSummary(scan) {
+  const output = scan.output || scan.harvester_output || scan.amass_output || '';
+  const emails = (output.match(/\b[A-Z0-9._%+]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi) || []).length;
+  const subdomains = (output.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}\b/gi) || []).length;
+  const ips = (output.match(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g) || []).length;
+  return `${subdomains} subdomains, ${emails} emails, ${ips} IPs`;
 }
