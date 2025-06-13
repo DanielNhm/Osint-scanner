@@ -6,7 +6,7 @@ This is a full-stack OSINT (Open Source Intelligence) application for domain rec
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/osint-scanner.git
+   git clone https://github.com/DanielNhm/osint-scanner.git
    ```
 2. Build the containers:
    ```bash
